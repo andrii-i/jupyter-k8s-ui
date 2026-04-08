@@ -1,18 +1,12 @@
-import {
-  Card, CardContent, Typography, IconButton, Chip, Tooltip, Menu, MenuItem,
-  ListItemIcon, Stack, Box, Divider,
-} from '@mui/material';
-import {
-  PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory,
-  Storage, Info,
-} from '@mui/icons-material';
+import { Card, CardContent, Typography, IconButton, Chip, Tooltip, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
+import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, Storage, Info } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Workspace } from '../../types';
 import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { getStatusColor, getStatusText } from '../../utils';
+import { getStatusColor, getStatusText, isOwner as checkIsOwner, getWorkspaceState } from '../../utils';
 import { strings } from '../../constants';
 import styles from './WorkspaceCard.module.css';
 
@@ -30,20 +24,13 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const deleteMutation = useDeleteWorkspace();
 
   const { metadata, spec, status } = workspace;
-  const isRunning = spec.desiredStatus === 'Running';
-  const isAvailable = status?.conditions?.find((c) => c.type === 'Available')?.status === 'True';
-  const isPending = isRunning && !isAvailable;
+  const { isRunning, isAvailable, isPending } = getWorkspaceState(workspace);
   const accessURL = status?.accessURL;
 
   const owner = metadata.annotations?.['workspace.jupyter.org/created-by'];
-  const isOwner = owner && user?.username && (
-    owner === user.username ||
-    owner === `github:${user.username}` ||
-    owner.endsWith(`/${user.username}`) ||
-    owner.includes(`:${user.username}`)
-  );
+  const ownerMatch = checkIsOwner(owner, user?.username);
 
-  const canOpen = isRunning && isAvailable && accessURL && (isOwner || spec.accessType === 'Public');
+  const canOpen = isRunning && isAvailable && accessURL && (ownerMatch || spec.accessType === 'Public');
 
   const statusColor = getStatusColor(isRunning, isAvailable, isPending);
   const statusText = getStatusText(isRunning, isAvailable, isPending);
@@ -72,12 +59,16 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
   return (
     <>
-      <Card className={styles.card} aria-label={strings.a11y.workspaceCard(spec.displayName, statusText)}>
+      <Card className={styles.card} aria-label={strings.a11y.workspaceCard(spec.displayName ?? metadata.name, statusText)}>
         <CardContent className={styles.cardContent}>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6" component="h3" noWrap sx={{ mb: 0.5 }}>{spec.displayName}</Typography>
-              <Typography variant="body2" color="text.secondary">{metadata.name}</Typography>
+              <Typography variant="h6" component="h3" noWrap sx={{ mb: 0.5 }}>
+                {spec.displayName ?? metadata.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {metadata.name}
+              </Typography>
             </Box>
             <IconButton size="small" onClick={handleMenuOpen} aria-label={strings.workspace.moreOptions}>
               <MoreVert />
@@ -92,19 +83,17 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
               sx={{ bgcolor: `${statusColor}1a`, color: statusColor, border: 'none' }}
             />
             <Chip label={spec.image} size="small" variant="outlined" className={styles.imageChip} />
-            {spec.accessType === 'OwnerOnly' && (
-              <Chip label={strings.common.private} size="small" className={styles.privateChip} />
-            )}
+            {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
           </Stack>
 
           <Stack direction="row" gap={2} sx={{ color: 'text.secondary' }}>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Memory sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources.limits.cpu} CPU</Typography>
+              <Typography variant="caption">{spec.resources?.limits?.cpu ?? '—'} CPU</Typography>
             </Stack>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Storage sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources.limits.memory}</Typography>
+              <Typography variant="caption">{spec.resources?.limits?.memory ?? '—'}</Typography>
             </Stack>
           </Stack>
         </CardContent>
@@ -122,8 +111,8 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
               </IconButton>
             </Tooltip>
           )}
-          {isOwner && (
-            isRunning ? (
+          {ownerMatch &&
+            (isRunning ? (
               <Tooltip title={strings.workspace.stop}>
                 <span>
                   <IconButton size="small" onClick={handleStop} disabled={stopMutation.isPending} aria-label={strings.workspace.stop}>
@@ -139,30 +128,35 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
                   </IconButton>
                 </span>
               </Tooltip>
-            )
-          )}
+            ))}
         </Box>
 
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
           <MenuItem onClick={handleViewDetails}>
-            <ListItemIcon><Info fontSize="small" /></ListItemIcon>
+            <ListItemIcon>
+              <Info fontSize="small" />
+            </ListItemIcon>
             <Typography variant="body2">{strings.workspace.viewDetails}</Typography>
           </MenuItem>
-          {isOwner && <Divider />}
-          {isOwner && (
+          {ownerMatch && <Divider />}
+          {ownerMatch && (
             <MenuItem onClick={handleDeleteClick}>
-              <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon>
-              <Typography variant="body2" color="error">{strings.common.delete}</Typography>
+              <ListItemIcon>
+                <Delete fontSize="small" color="error" />
+              </ListItemIcon>
+              <Typography variant="body2" color="error">
+                {strings.common.delete}
+              </Typography>
             </MenuItem>
           )}
         </Menu>
       </Card>
 
-      {isOwner && (
+      {ownerMatch && (
         <ConfirmDialog
           open={deleteDialogOpen}
           title={strings.workspace.deleteTitle}
-          message={strings.workspace.deleteMessage(spec.displayName)}
+          message={strings.workspace.deleteMessage(spec.displayName ?? metadata.name)}
           confirmLabel={strings.common.delete}
           onConfirm={handleDeleteConfirm}
           onCancel={handleCancelDelete}

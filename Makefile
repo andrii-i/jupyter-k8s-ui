@@ -57,6 +57,14 @@ lint: ## Run eslint linter.
 lint-fix: ## Run eslint linter and perform fixes.
 	bun run lint --fix
 
+.PHONY: format
+format: ## Format code with prettier.
+	bun run format
+
+.PHONY: format-check
+format-check: ## Check code formatting.
+	bun run format:check
+
 ##@ Build
 
 .PHONY: build
@@ -115,7 +123,8 @@ refresh-token: ## Fetch a fresh OIDC token and set up .env for local development
 		echo "Ensure kubectl-oidc-login plugin is installed: brew install kubelogin"; \
 		exit 1; \
 	fi; \
-	sed -i '' "s|^DEV_ACCESS_TOKEN=.*|DEV_ACCESS_TOKEN=$$TOKEN|" .env; \
+	TMPENV=$$(mktemp); \
+	sed "s|^DEV_ACCESS_TOKEN=.*|DEV_ACCESS_TOKEN=$$TOKEN|" .env > "$$TMPENV" && mv "$$TMPENV" .env; \
 	echo "DEV_ACCESS_TOKEN updated in .env"
 
 .PHONY: dev
