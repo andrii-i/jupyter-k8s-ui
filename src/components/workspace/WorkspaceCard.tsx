@@ -1,4 +1,5 @@
-import { Card, CardContent, Typography, IconButton, Chip, Tooltip, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
+import { Card, CardContent, Typography, IconButton, Chip, Button, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, Storage, Info } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -6,7 +7,7 @@ import type { Workspace } from '../../types';
 import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { getStatusColor, getStatusText, isOwner as checkIsOwner, getWorkspaceState } from '../../utils';
+import { getStatusText, isOwner as checkIsOwner, getWorkspaceState } from '../../utils';
 import { strings } from '../../constants';
 import styles from './WorkspaceCard.module.css';
 
@@ -32,7 +33,6 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
   const canOpen = isRunning && isAvailable && accessURL && (ownerMatch || spec.accessType === 'Public');
 
-  const statusColor = getStatusColor(isRunning, isAvailable, isPending);
   const statusText = getStatusText(isRunning, isAvailable, isPending);
 
   const handleOpen = () => {
@@ -77,10 +77,13 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2.5, flexWrap: 'wrap' }}>
             <Chip
-              icon={<Circle sx={{ fontSize: 8, color: statusColor }} />}
+              icon={<Circle sx={{ fontSize: 8 }} />}
               label={statusText}
               size="small"
-              sx={{ bgcolor: `${statusColor}1a`, color: statusColor, border: 'none' }}
+              sx={(theme) => {
+                const color = isRunning && isAvailable ? theme.palette.success.main : isPending ? theme.palette.warning.main : theme.palette.text.disabled;
+                return { bgcolor: alpha(color, 0.1), color, border: 'none', '& .MuiChip-icon': { color } };
+              }}
             />
             <Chip label={spec.image} size="small" variant="outlined" className={styles.imageChip} />
             {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
@@ -99,35 +102,23 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
         </CardContent>
 
         <Box className={styles.actions}>
-          <Tooltip title={strings.workspace.viewDetails}>
-            <IconButton size="small" onClick={handleViewDetails} aria-label={strings.workspace.viewDetails}>
-              <Info fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <Button size="small" startIcon={<Info fontSize="small" />} onClick={handleViewDetails} color="secondary">
+            {strings.workspace.details}
+          </Button>
           {canOpen && (
-            <Tooltip title={strings.workspace.openWorkspace}>
-              <IconButton size="small" onClick={handleOpen} aria-label={strings.workspace.openWorkspace} color="primary">
-                <OpenInNew fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <Button size="small" startIcon={<OpenInNew fontSize="small" />} onClick={handleOpen} color="primary">
+              {strings.workspace.open}
+            </Button>
           )}
           {ownerMatch &&
             (isRunning ? (
-              <Tooltip title={strings.workspace.stop}>
-                <span>
-                  <IconButton size="small" onClick={handleStop} disabled={stopMutation.isPending} aria-label={strings.workspace.stop}>
-                    <Stop fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
+              <Button size="small" startIcon={<Stop fontSize="small" />} onClick={handleStop} disabled={stopMutation.isPending} color="secondary">
+                {strings.workspace.stop}
+              </Button>
             ) : (
-              <Tooltip title={strings.workspace.start}>
-                <span>
-                  <IconButton size="small" onClick={handleStart} disabled={startMutation.isPending} aria-label={strings.workspace.start} color="primary">
-                    <PlayArrow fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
+              <Button size="small" startIcon={<PlayArrow fontSize="small" />} onClick={handleStart} disabled={startMutation.isPending} color="primary">
+                {strings.workspace.start}
+              </Button>
             ))}
         </Box>
 
