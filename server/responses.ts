@@ -1,11 +1,29 @@
 import { log } from './logger';
 
+// --- Security Headers ---
+
+export const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '0',
+  'Cache-Control': 'no-store',
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+  ].join('; '),
+};
+
 // --- JSON Response Helpers ---
 
 export function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS },
   });
 }
 
@@ -40,13 +58,4 @@ export function handleK8sError(error: unknown, fallbackMessage: string): Respons
   }
 
   return errorResponse(500, fallbackMessage, err.message);
-}
-
-// --- Input Validation ---
-
-// K8s resource names: lowercase alphanumeric, hyphens, 1-253 chars
-const K8S_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,251}[a-z0-9])?$/;
-
-export function isValidK8sName(name: unknown): name is string {
-  return typeof name === 'string' && K8S_NAME_RE.test(name);
 }
