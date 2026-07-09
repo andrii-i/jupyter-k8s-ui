@@ -35,6 +35,10 @@ make deploy-aws          # Build + push to ECR + deploy to EKS
 make help                # Show all Makefile targets
 ```
 
+## Automated code review
+
+Open PRs are reviewed automatically in CI by [roborev](https://roborev.io) (policy in [`.roborev.toml`](.roborev.toml)). Run the same review locally with `make review`; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Makefile Targets
 
 ```bash
