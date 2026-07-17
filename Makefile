@@ -29,6 +29,11 @@ endif
 NAMESPACE ?= jupyter-k8s-router
 DEPLOYMENT ?= web-app
 DEV_KIND_CLUSTER ?= jupyter-k8s-dev
+SERVE_HOST_PORT ?= 8090
+# Auto-exit for `serve-host`: it binds 0.0.0.0 with session auth off (anyone who can
+# reach the URL acts as you), so cap the lifetime instead of leaving it up overnight.
+# Override with SERVE_HOST_TIMEOUT=0 to disable, or e.g. SERVE_HOST_TIMEOUT=2h.
+SERVE_HOST_TIMEOUT ?= 30m
 
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
@@ -142,6 +147,23 @@ dev-full: ## Run both frontend and backend dev servers concurrently.
 .PHONY: start
 start: build ## Build and start the production server.
 	bun run start
+
+.PHONY: serve-host
+serve-host: build ## Build + serve the whole app (UI + API) on all interfaces
+	@if [ ! -f .env ] || ! grep -q '^DEV_ACCESS_TOKEN=..' .env; then \
+		echo "ERROR: no DEV_ACCESS_TOKEN in .env — run 'make refresh-token' first."; exit 1; \
+	fi
+	@echo "Serving at http://$$(hostname):$(SERVE_HOST_PORT)"
+	@echo "Note: dev mode — requests use YOUR token from .env; anyone who can reach this URL acts as you."
+	@if [ "$(SERVE_HOST_TIMEOUT)" != "0" ]; then \
+		echo "Auto-exit after $(SERVE_HOST_TIMEOUT) (override with SERVE_HOST_TIMEOUT=0 to disable)."; \
+	fi
+	@set -a; . ./.env; set +a; \
+		if [ "$(SERVE_HOST_TIMEOUT)" != "0" ] && command -v timeout >/dev/null 2>&1; then \
+			NODE_ENV=development SESSION_ENABLED=false PORT=$(SERVE_HOST_PORT) timeout $(SERVE_HOST_TIMEOUT) bun run server/index.ts; \
+		else \
+			NODE_ENV=development SESSION_ENABLED=false PORT=$(SERVE_HOST_PORT) bun run server/index.ts; \
+		fi
 
 ##@ Kind Deployment
 

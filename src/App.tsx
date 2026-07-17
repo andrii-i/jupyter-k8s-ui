@@ -11,6 +11,7 @@ const WorkspaceList = lazy(() => import('./pages/WorkspaceList').then((m) => ({ 
 const WorkspaceCreate = lazy(() => import('./pages/WorkspaceCreate').then((m) => ({ default: m.WorkspaceCreate })));
 const WorkspaceDetail = lazy(() => import('./pages/WorkspaceDetail').then((m) => ({ default: m.WorkspaceDetail })));
 const KubectlAccess = lazy(() => import('./pages/KubectlAccess').then((m) => ({ default: m.KubectlAccess })));
+const WorkspaceAdvancedEditor = lazy(() => import('./pages/WorkspaceAdvancedEditor').then((m) => ({ default: m.WorkspaceAdvancedEditor })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +45,7 @@ function AppContent() {
               <Route index element={<WorkspaceList />} />
               <Route path="create" element={<WorkspaceCreate />} />
               <Route path="workspace/:name" element={<WorkspaceDetail />} />
+              <Route path="workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
               <Route path="kubectl" element={<KubectlAccess />} />
             </Route>
           </Routes>
