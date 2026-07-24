@@ -71,12 +71,19 @@ export async function handleCreateWorkspace(jwt: string, req: Request): Promise<
       accessType: body.accessType || 'Public',
       ownershipType: body.ownershipType || 'OwnerOnly',
     };
+    if (body.templateRef) spec.templateRef = body.templateRef;
+    if (body.image) spec.image = body.image;
     if (body.resources) spec.resources = body.resources;
     if (body.storage) spec.storage = body.storage;
     if (body.idleShutdown) {
+      // Send a COMPLETE idleShutdown block, echoing `detection` verbatim — the CRD
+      // requires detection whenever idleShutdown is present, and the operator does not
+      // fill it for a partial block. `detection` is only omitted when the client didn't
+      // supply one (idle-Unavailable paths don't send idleShutdown at all).
       spec.idleShutdown = {
         enabled: body.idleShutdown.enabled,
         idleTimeoutInMinutes: body.idleShutdown.timeoutInMinutes,
+        ...(body.idleShutdown.detection !== undefined && { detection: body.idleShutdown.detection }),
       };
     }
   }
@@ -150,7 +157,10 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
       if (rawBody.templateRef) nextSpec.templateRef = rawBody.templateRef;
       updated.spec = nextSpec;
     } else {
-      // Simple form / start-stop PATCH: selective field overlay (unchanged).
+      // Simple form / start-stop: selective field overlay. This code path is chosen by the
+      // BODY SHAPE (field-shaped, no `spec`), not the HTTP verb — both PUT and PATCH route
+      // here (see middleware/router.ts) and behave identically; only the raw-spec body
+      // above takes the full-replace path.
       const body = rawBody as UpdateWorkspaceBody;
       if (body.displayName !== undefined) updated.spec.displayName = body.displayName;
       if (body.image !== undefined) updated.spec.image = body.image;
@@ -163,9 +173,12 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
       if (body.podSecurityContext !== undefined) updated.spec.podSecurityContext = body.podSecurityContext;
       if (body.accessStrategy !== undefined) updated.spec.accessStrategy = body.accessStrategy;
       if (body.idleShutdown !== undefined) {
+        // Wholesale replace of the idleShutdown block (correct because the client sends
+        // the COMPLETE object, echoing the workspace's own `detection` verbatim).
         updated.spec.idleShutdown = {
           enabled: body.idleShutdown.enabled,
           idleTimeoutInMinutes: body.idleShutdown.timeoutInMinutes,
+          ...(body.idleShutdown.detection !== undefined && { detection: body.idleShutdown.detection }),
         };
       }
     }

@@ -62,11 +62,25 @@ export const strings = {
     createTitle: 'Create Workspace',
     createDescription: 'Configure your new development environment',
 
+    // Template picker
+    templatePickerTitle: 'Template',
+    templateNoTemplateName: 'No template',
+    templateNoTemplateDescription: 'Bare workspace: choose the image and resources within static bounds.',
+    templateSharedDenied: "Some shared templates couldn't be loaded. You may be missing access to the shared namespace.",
+    templateLoadError: "Couldn't load templates; continuing with static bounds.",
+    templateLockedTooltipEdit: 'This workspace references a template. Use YAML editor to change this setting.',
+    templateLockedTooltipCreate: 'Your environment enforces a template.',
+    imageLockedTooltip: 'The template locks the application image. Use the YAML editor to change this setting.',
+    nameLockedTooltip: 'The workspace name is its primary identifier and cannot be changed after creation.',
+    storageLockedTooltip: 'Storage size can only be set at the time of creation.',
+    templateCustomUnresolved: (name: string) => `Custom: ${name}`,
+    templateNotAccessible: "This workspace references a template you can't access. The server enforces its bounds and may reject changes.",
+
     // Form sections
     sectionWorkspace: 'Workspace',
     sectionTemplate: 'Template',
     sectionBasicInfo: 'Basic Information',
-    sectionEnvironment: 'Environment',
+    sectionEnvironment: 'Application',
     sectionResources: 'Resources',
     sectionAccess: 'Access',
     sectionIdleShutdown: 'Idle Shutdown',
@@ -75,6 +89,7 @@ export const strings = {
     // Idle shutdown
     idleShutdownEnable: 'Enable automatic shutdown when idle',
     idleShutdownTimeout: 'Idle timeout',
+    idleShutdownLockedTooltip: 'This template requires idle shutdown to be enabled.',
 
     // Form fields
     fieldName: 'Name',
@@ -86,6 +101,7 @@ export const strings = {
     fieldImage: 'Image',
     fieldImagePlaceholder: 'Select or enter a custom image...',
     fieldImageHelper: 'You can enter any container image URL',
+    imageRequiredNoTemplate: 'Specify an application image when not referencing a template.',
     fieldMountPath: 'Storage Mount Path',
     fieldMountPathHelper: 'Directory where persistent storage will be mounted',
 
@@ -123,6 +139,18 @@ export const strings = {
     deleteTitle: 'Delete Workspace',
     deleteMessage: (name: string) => `Are you sure you want to delete "${name}"? This action cannot be undone.`,
 
+    // Simple edit page
+    editTitle: 'Edit Workspace',
+    editSave: 'Save Changes',
+    editConformTitle: 'This workspace was adjusted to fit its template:',
+    editConformDismiss: 'Dismiss',
+    editConformCpu: (from: string, to: string) => `CPU reduced from ${from} to ${to} (template limit).`,
+    editConformMemory: (from: string, to: string) => `Memory reduced from ${from} to ${to} (template limit).`,
+    editConformStorage: (from: string, to: string) => `Storage adjusted from ${from} to ${to} (template limit).`,
+    editConformImage: (from: string, to: string) => `Image changed from "${from}" to "${to}" (not allowed by template).`,
+    editConformIdleTimeout: (from: string, to: string) => `Idle timeout adjusted from ${from} to ${to} (template bounds).`,
+    editConformIdleEnabled: 'Idle shutdown was enabled as required by the template.',
+
     // Advanced YAML editor
     advancedCreateTitle: 'Create Workspace (Advanced)',
     advancedEditTitle: 'Edit Workspace (Advanced)',
@@ -135,6 +163,8 @@ export const strings = {
     advancedTemplateNone: '(none — use namespace default)',
     advancedTemplateFreeText: 'Enter template name manually',
     advancedResolvedBanner: 'This shows the current resolved configuration, including values applied by the template.',
+    advancedTemplateSwitchCaution:
+      "Changing the template may request resources that can't be applied to an existing workspace. For example, a storage volume may not shrink, and only certain types of storage support scaling up in place. Incompatible changes may cause the workspace to fail to restart.",
     advancedTemplateSwitchTitle: 'Regenerate scaffold?',
     advancedTemplateSwitchMessage: (tmpl: string) =>
       `Apply "${tmpl}"'s defaults to the editor? This regenerates the scaffold and discards your current YAML edits.`,
@@ -160,6 +190,7 @@ export const strings = {
     guidanceBoundsHeader: 'Bounds',
     guidanceImages: 'Images',
     guidanceAnyImage: 'Any image allowed',
+    guidanceAnyImagePlus: 'Suggested (custom images also allowed):',
     guidanceDefaultImageOnly: 'Default image only',
     guidanceResources: 'Resources',
     guidanceCpu: 'CPU',
@@ -168,7 +199,9 @@ export const strings = {
     guidanceStorage: 'Storage',
     guidanceStorageSize: 'Size',
     guidanceIdleShutdown: 'Idle shutdown',
-    guidanceIdleTimeout: 'Timeout (min)',
+    guidanceIdleRequired: 'Required',
+    guidanceIdleOptional: 'Optional',
+    guidanceIdleTimeout: 'Timeout (minutes)',
   },
 
   kubectl: {

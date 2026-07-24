@@ -68,8 +68,13 @@ class ApiClient {
 
   createWorkspace = (data: CreateWorkspaceRequest) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
 
+  // Field-shaped selective update: the server reads the live spec and overlays only the
+  // fields present in the body (`if (body.x !== undefined) spec.x = body.x`), so untouched
+  // fields — including stored requests — survive. Used by the simple-edit page. PATCH is
+  // the appropriate verb for a partial update; the overlay is driven by the body shape,
+  // not the verb (the raw-spec advanced editor uses PUT for a full-spec replace).
   updateWorkspace = (name: string, data: UpdateWorkspaceRequest) =>
-    this.request<Workspace>(`/workspaces/${name}`, { method: 'PUT', body: JSON.stringify(data) });
+    this.request<Workspace>(`/workspaces/${name}`, { method: 'PATCH', body: JSON.stringify(data) });
 
   deleteWorkspace = (name: string) => this.request<void>(`/workspaces/${name}`, { method: 'DELETE' });
 
