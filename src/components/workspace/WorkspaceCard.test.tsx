@@ -1,60 +1,88 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
-import { render, screen, cleanup } from '@testing-library/react';
-import { WorkspaceCard } from './WorkspaceCard';
-import { TestProviders, makeWorkspace } from '../../test-utils';
+import { render, screen, cleanup, act } from '@testing-library/react';
+import type { DiscoveredTemplate } from '../../types';
+import { TestProviders, makeWorkspace, makeQueryClient } from '../../test-utils';
 
-// Mock auth context to pretend "alice" is logged in. `displayUser` (raw OIDC claim,
-// display-only) and `k8sUser` (the authoritative K8s username `created-by` holds) are
-// DELIBERATELY DIFFERENT here: ownership must compare against k8sUser, so the owner annotations
-// in these tests use 'alice' (== k8sUser) while displayUser is a distinct claim. This makes the
-// owner-gating tests a real regression guard for #57 — reverting the call site to
-// user?.displayUser would break them.
-mock.module('../../context', () => ({
-  useAuth: () => ({ user: { displayUser: 'alice-raw-claim', k8sUser: 'alice' }, isLoading: false }),
-}));
-
-// Mock mutations so we can assert on `isPending` etc without real fetches
-const mutationStub = { mutate: mock(() => {}), isPending: false };
+// Leaf-mock the API client (the pattern every suite here uses) and run the real hooks
+// against it. Mocking the ../../api or ../../context barrels instead leaks into every
+// test file that runs after this one: bun module mocks are process-global and never
+// restored, and file order varies by filesystem, so a barrel mock breaks other suites
+// only on some machines (the CI-only SimpleWorkspaceEditor failures).
 // Mutable so individual tests can supply template fixtures for the resources fallback.
-let templatesItems: unknown[] = [];
-mock.module('../../api', () => ({
-  useStartWorkspace: () => mutationStub,
-  useStopWorkspace: () => mutationStub,
-  useDeleteWorkspace: () => mutationStub,
-  useTemplates: () => ({ data: { items: templatesItems }, isLoading: false }),
+let templatesItems: DiscoveredTemplate[] = [];
+mock.module('../../api/client', () => ({
+  apiClient: {
+    listTemplates: mock(async () => ({
+      items: templatesItems,
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'default', shared: 'shared' },
+    })),
+    startWorkspace: mock(async () => ({})),
+    stopWorkspace: mock(async () => ({})),
+    deleteWorkspace: mock(async () => ({})),
+  },
+  ApiError: class ApiError extends Error {},
 }));
 
-function renderCard(ws: ReturnType<typeof makeWorkspace>) {
-  return render(
-    <TestProviders>
-      <WorkspaceCard workspace={ws} />
-    </TestProviders>,
-  );
+const { WorkspaceCard } = await import('./WorkspaceCard');
+const { AuthProvider, authKeys } = await import('../../context/AuthContext');
+
+// The signed-in user. `displayUser` (raw OIDC claim, display-only) and `k8sUser` (the
+// authoritative K8s username `created-by` holds) are DELIBERATELY DIFFERENT: ownership
+// must compare against k8sUser, so the owner annotations in these tests use 'alice'
+// (== k8sUser) while displayUser is a distinct claim. This makes the owner-gating tests
+// a real regression guard for #57 — reverting the call site to user?.displayUser would
+// break them.
+const alice = { displayUser: 'alice-raw-claim', k8sUser: 'alice' };
+
+async function renderCard(ws: ReturnType<typeof makeWorkspace>) {
+  const queryClient = makeQueryClient();
+  // Seed the me-query (fresh for its 5-minute staleTime), so AuthProvider resolves
+  // without a fetch — the same trick TestProviders uses for the namespace bootstrap.
+  queryClient.setQueryData(authKeys.me, alice);
+  let result!: ReturnType<typeof render>;
+  // Render, then settle the async templates query in a second act() scope: the
+  // resolution's batched notify lands after the rendering act exits, so a single
+  // combined scope leaves the commit outside act and the fallback text unrendered.
+  await act(async () => {
+    result = render(
+      <TestProviders queryClient={queryClient}>
+        <AuthProvider>
+          <WorkspaceCard workspace={ws} />
+        </AuthProvider>
+      </TestProviders>,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  return result;
 }
 
-describe('WorkspaceCard', () => {
-  beforeEach(() => {
-    cleanup();
-    mutationStub.mutate.mockClear();
-  });
+beforeEach(() => {
+  cleanup();
+  templatesItems = [];
+});
 
-  test('shows Running status when workspace is running + available', () => {
+describe('WorkspaceCard', () => {
+  test('shows Running status when workspace is running + available', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('Running')).toBeDefined();
   });
 
-  test('shows Stopped status when desiredStatus is Stopped', () => {
+  test('shows Stopped status when desiredStatus is Stopped', async () => {
     const ws = makeWorkspace({
       owner: 'alice',
       spec: { desiredStatus: 'Stopped', displayName: 'Test', image: 'img', accessType: 'Public', ownershipType: 'OwnerOnly' },
       status: { accessURL: '', conditions: [] },
     });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('Stopped')).toBeDefined();
   });
 
-  test('shows Starting when running but not yet available', () => {
+  test('shows Starting when running but not yet available', async () => {
     const ws = makeWorkspace({
       owner: 'alice',
       status: {
@@ -62,106 +90,104 @@ describe('WorkspaceCard', () => {
         conditions: [{ type: 'Progressing', status: 'True', reason: '', message: '' }],
       },
     });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('Starting')).toBeDefined();
   });
 
-  test('shows stop button when owner + running', () => {
+  test('shows stop button when owner + running', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByRole('button', { name: /stop/i })).toBeDefined();
   });
 
-  test('shows start button when owner + stopped', () => {
+  test('shows start button when owner + stopped', async () => {
     const ws = makeWorkspace({
       owner: 'alice',
       spec: { desiredStatus: 'Stopped', displayName: 'T', image: 'i', accessType: 'Public', ownershipType: 'OwnerOnly' },
       status: { accessURL: '', conditions: [] },
     });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByRole('button', { name: /start/i })).toBeDefined();
   });
 
-  test('hides start/stop buttons for non-owner', () => {
+  test('hides start/stop buttons for non-owner', async () => {
     const ws = makeWorkspace({ owner: 'bob' });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.queryByRole('button', { name: /^stop$/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /^start$/i })).toBeNull();
   });
 
-  test('shows Open button when running + available + public', () => {
+  test('shows Open button when running + available + public', async () => {
     const ws = makeWorkspace({ owner: 'bob' }); // not owner but public
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByRole('button', { name: /open/i })).toBeDefined();
   });
 
-  test('hides Open button for non-owner on OwnerOnly workspace', () => {
+  test('hides Open button for non-owner on OwnerOnly workspace', async () => {
     const ws = makeWorkspace({
       owner: 'bob',
       spec: { accessType: 'OwnerOnly', desiredStatus: 'Running', displayName: 'T', image: 'i', ownershipType: 'OwnerOnly' },
     });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.queryByRole('button', { name: /open/i })).toBeNull();
   });
 
-  test('hides Open button when workspace is not available', () => {
+  test('hides Open button when workspace is not available', async () => {
     const ws = makeWorkspace({
       owner: 'alice',
       status: { accessURL: 'https://ws.example.com', conditions: [] },
     });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.queryByRole('button', { name: /open/i })).toBeNull();
   });
 
-  test('shows displayName when set, falls back to name', () => {
+  test('shows displayName when set, falls back to name', async () => {
     const ws = makeWorkspace({
       owner: 'alice',
       spec: { displayName: 'My Display', image: 'i', desiredStatus: 'Running', accessType: 'Public', ownershipType: 'OwnerOnly' },
     });
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('My Display')).toBeDefined();
   });
 });
 
 describe('WorkspaceCard accelerator chip', () => {
-  beforeEach(() => cleanup());
-
-  test('renders a count + friendly label chip when an accelerator limit is present', () => {
+  test('renders a count + friendly label chip when an accelerator limit is present', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
     ws.spec.resources = { limits: { cpu: '2', memory: '4Gi', 'nvidia.com/gpu': '1' } };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('1 GPU')).toBeDefined();
   });
 
-  test('renders nothing accelerator-related without such a limit', () => {
+  test('renders nothing accelerator-related without such a limit', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
     ws.spec.resources = { limits: { cpu: '2', memory: '4Gi' } };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.queryByText(/GPU/)).toBeNull();
   });
 
-  test('stored quantities the sliders cannot produce round to 2 decimals', () => {
+  test('stored quantities the sliders cannot produce round to 2 decimals', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
     // "1G" is 10^9 bytes = 0.9313… Gi; "1500m" is 1.5 cores — both must not render raw floats.
     ws.spec.resources = { limits: { cpu: '1500m', memory: '1G' } };
     ws.spec.storage = { size: '2G' };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('1.5 CPU')).toBeDefined();
     expect(screen.getByText(/^0\.93 GiB$/)).toBeDefined();
     expect(screen.getByText(/^1\.86 GiB$/)).toBeDefined();
   });
 
-  test('ephemeral-storage limits never render as accelerator chips (unprefixed keys are built-ins)', () => {
+  test('ephemeral-storage limits never render as accelerator chips (unprefixed keys are built-ins)', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
     ws.spec.resources = { limits: { cpu: '2', memory: '4Gi', 'ephemeral-storage': '1073741824' } };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.queryByText(/ephemeral-storage/)).toBeNull();
   });
 
-  test('a tiny nonzero quantity renders as <0.01, never as 0', () => {
+  test('a tiny nonzero quantity renders as <0.01, never as 0', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
     ws.spec.resources = { limits: { cpu: '1m', memory: '4Gi' } };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('<0.01 CPU')).toBeDefined();
   });
 });
@@ -171,37 +197,33 @@ describe('WorkspaceCard resources fallback to template defaults (#69)', () => {
     metadata: { name: 'pinned-gpu', namespace: 'shared' },
     spec: { defaultResources: { requests: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' } } },
     sourceNamespace: 'shared',
-  };
+  } as DiscoveredTemplate;
 
-  beforeEach(() => {
-    cleanup();
+  test('a workspace without spec.resources shows its template defaults', async () => {
     templatesItems = [pinnedTemplate];
-  });
-
-  test('a workspace without spec.resources shows its template defaults', () => {
     const ws = makeWorkspace({ owner: 'alice' });
     delete ws.spec.resources;
     ws.spec.templateRef = { name: 'pinned-gpu', namespace: 'shared' };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('3 CPU')).toBeDefined();
     expect(screen.getByText('12 GiB')).toBeDefined();
     expect(screen.getByText('1 GPU')).toBeDefined();
   });
 
-  test('an unresolvable templateRef keeps the placeholder values', () => {
-    templatesItems = [];
+  test('an unresolvable templateRef keeps the placeholder values', async () => {
     const ws = makeWorkspace({ owner: 'alice' });
     delete ws.spec.resources;
     ws.spec.templateRef = { name: 'ghost-template' };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('— CPU')).toBeDefined();
   });
 
-  test('stored resources win over template defaults', () => {
+  test('stored resources win over template defaults', async () => {
+    templatesItems = [pinnedTemplate];
     const ws = makeWorkspace({ owner: 'alice' });
     ws.spec.resources = { limits: { cpu: '2', memory: '4Gi' } };
     ws.spec.templateRef = { name: 'pinned-gpu', namespace: 'shared' };
-    renderCard(ws);
+    await renderCard(ws);
     expect(screen.getByText('2 CPU')).toBeDefined();
     // The template's gpu default must not leak into a workspace that stored no gpu.
     expect(screen.queryByText('1 GPU')).toBeNull();
