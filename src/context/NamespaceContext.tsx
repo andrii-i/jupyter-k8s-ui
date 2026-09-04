@@ -3,6 +3,7 @@ import { createContext, useContext, useCallback, useEffect, useMemo, type ReactN
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { isAuthError } from '../api/auth-interceptor';
 import type { MyNamespaceResponse, NamespaceListResponse } from '../types';
 
 interface NamespaceContextType {
@@ -14,6 +15,14 @@ interface NamespaceContextType {
   // active namespace is no longer visible (revoked), drop to a usable one. Returns true if
   // it changed the active namespace (caller should stop treating the 403 as fatal).
   recoverFromForbidden: () => Promise<boolean>;
+  // Initial-bootstrap resolution state. `isBootstrapLoading` covers the in-flight window
+  // (including bounded retries); `bootstrapError` is set only after they are exhausted, and
+  // never for an auth failure (that routes to re-login). While either holds, activeNamespace
+  // is undefined, so a namespaced view shows a spinner / retry rather than an empty state
+  // that reads as "you have no workspaces". `retryBootstrap` refetches the resolution.
+  isBootstrapLoading: boolean;
+  bootstrapError: Error | null;
+  retryBootstrap: () => void;
 }
 
 const NamespaceContext = createContext<NamespaceContextType | null>(null);
@@ -45,12 +54,21 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlNamespace = searchParams.get('namespace') || undefined;
 
-  // Cheap bootstrap: the server resolves cookie-remembered-else-configured (no SSAR).
-  const { data: bootstrap } = useQuery({
+  // Cheap bootstrap: the server resolves cookie-remembered-else-configured (no SSAR). A
+  // single failure used to wedge the app with no namespace and no recovery (retry was off
+  // and staleTime Infinity meant no refetch): the switcher stuck on "…" and the list read
+  // "No workspaces yet". Retry transient failures a bounded number of times, but never an
+  // auth failure (that routes to re-login), mirroring the /me query.
+  const {
+    data: bootstrap,
+    error: bootstrapError,
+    isLoading: isBootstrapLoading,
+    refetch: refetchBootstrap,
+  } = useQuery({
     queryKey: namespaceKeys.active,
     queryFn: (): Promise<MyNamespaceResponse> => apiClient.getMyNamespace(),
     staleTime: Infinity,
-    retry: false,
+    retry: (failureCount, error) => (isAuthError(error) ? false : failureCount < 2),
   });
 
   // Precedence: URL ?namespace= (per-tab, wins over cookie) > server-resolved active
@@ -128,7 +146,14 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
     return true;
   }, [queryClient, activeNamespace, setActiveNamespace]);
 
-  const value = useMemo(() => ({ activeNamespace, setActiveNamespace, recoverFromForbidden }), [activeNamespace, setActiveNamespace, recoverFromForbidden]);
+  const retryBootstrap = useCallback(() => {
+    void refetchBootstrap();
+  }, [refetchBootstrap]);
+
+  const value = useMemo(
+    () => ({ activeNamespace, setActiveNamespace, recoverFromForbidden, isBootstrapLoading, bootstrapError, retryBootstrap }),
+    [activeNamespace, setActiveNamespace, recoverFromForbidden, isBootstrapLoading, bootstrapError, retryBootstrap],
+  );
 
   return <NamespaceContext.Provider value={value}>{children}</NamespaceContext.Provider>;
 }

@@ -31,7 +31,7 @@ const PAGE_SIZE = 12;
 export function WorkspaceList() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { activeNamespace, recoverFromForbidden } = useNamespace();
+  const { activeNamespace, recoverFromForbidden, isBootstrapLoading, bootstrapError, retryBootstrap } = useNamespace();
   const { data: workspaces, isLoading, error, refetch, isFetching } = useWorkspaces();
 
   // A 403 on the list means "no access to this namespace" (typically the default, for a
@@ -95,7 +95,9 @@ export function WorkspaceList() {
 
   const handleCreateClick = () => navigate('/create');
 
-  if (isLoading) {
+  // No namespace yet: the workspaces query is disabled until one resolves, so show the
+  // bootstrap's own progress rather than a premature "No workspaces yet".
+  if (isLoading || (!activeNamespace && isBootstrapLoading)) {
     return (
       <Stack alignItems="center" justifyContent="center" sx={{ minHeight: '400px' }}>
         <CircularProgress size={32} />
@@ -177,7 +179,19 @@ export function WorkspaceList() {
         </Stack>
       </Stack>
 
-      {error && isAuthError(error) ? (
+      {!activeNamespace && bootstrapError ? (
+        <Paper className={styles.emptyState} elevation={0}>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            {strings.namespace.loadErrorTitle}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" className={styles.emptyStateDescription}>
+            {strings.namespace.loadErrorDescription}
+          </Typography>
+          <Button variant="contained" onClick={retryBootstrap}>
+            {strings.namespace.loadErrorAction}
+          </Button>
+        </Paper>
+      ) : error && isAuthError(error) ? (
         <Paper className={styles.emptyState} elevation={0}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             {strings.workspace.sessionExpired}
