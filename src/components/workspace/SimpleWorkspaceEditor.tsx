@@ -18,7 +18,7 @@
 //     it would let the operator's defaulter re-enable idle from the template default).
 //   — storage read-only on edit.
 //   Identity: name read-only (immutable); displayName editable.
-//   Save: selective PATCH, no desiredStatus (stay Stopped), navigate to '/'.
+//   Save: selective PATCH, no desiredStatus (stay Stopped), navigate back to the list.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -41,7 +41,9 @@ import {
   type ResolvedTemplateControls,
   shouldEmitAccelerator,
   findTemplateByRef,
+  withNamespaceParam,
 } from '../../utils';
+import { useNamespace } from '../../context/NamespaceContext';
 import { WorkspaceResourceForm, type WorkspaceFormValues } from './WorkspaceResourceForm';
 import { LockedTemplateField } from './LockedTemplateField';
 import { AdvancedBox } from './AdvancedBox';
@@ -130,6 +132,7 @@ function seedFromSpec(
 
 export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameChange, onSwitchToYaml }: SimpleWorkspaceEditorProps) {
   const navigate = useNavigate();
+  const { activeNamespace } = useNamespace();
   const { workspace: ws, common } = strings;
   const updateMutation = useUpdateWorkspace();
   const templatesQuery = useTemplates();
@@ -274,13 +277,13 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
 
     try {
       await updateMutation.mutateAsync({ name: workspace.metadata.name, data: request });
-      navigate('/');
+      navigate(withNamespaceParam('/', activeNamespace));
     } catch (err) {
       setSaveError(
         err instanceof ApiError ? (err.details ? `${err.message}: ${err.details}` : err.message) : err instanceof Error ? err.message : 'Save failed',
       );
     }
-  }, [displayName, workspace, storedRef, values, shouldSendResources, controls, updateMutation, navigate]);
+  }, [displayName, workspace, storedRef, values, shouldSendResources, controls, updateMutation, navigate, activeNamespace]);
 
   const showBanner = seed.adjustments.length > 0 && !bannerDismissed;
 
@@ -322,7 +325,7 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
       <AdvancedBox onSwitchToYaml={onSwitchToYaml} />
 
       <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button variant="text" onClick={() => navigate('/')}>
+        <Button variant="text" onClick={() => navigate(withNamespaceParam('/', activeNamespace))}>
           {common.cancel}
         </Button>
         <Button variant="contained" onClick={handleSave} disabled={updateMutation.isPending}>

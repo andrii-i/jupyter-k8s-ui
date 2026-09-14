@@ -2,7 +2,7 @@ import { describe, test, expect, mock, beforeEach, afterEach, beforeAll, afterAl
 import { StrictMode } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import type { AdvancedWorkspacePayload, CreateWorkspaceRequest, DiscoveredTemplate, DiscoveryResponse } from '../types';
 
@@ -61,7 +61,12 @@ const flush = () =>
 // leaks into AuthContext.test. This keeps the real provider and only fakes the network.
 const realFetch = globalThis.fetch;
 
-async function renderCreate() {
+function LocationProbe() {
+  const { pathname, search } = useLocation();
+  return <div data-testid="location">{pathname + search}</div>;
+}
+
+async function renderCreate(initialEntry = '/create') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   // Seed the namespace bootstrap so NamespaceProvider resolves synchronously to user-ns
   // (the templates fixture's own namespace); global fetch is stubbed only for /me.
@@ -75,9 +80,10 @@ async function renderCreate() {
       <StrictMode>
         <QueryClientProvider client={client}>
           <AuthProvider>
-            <MemoryRouter initialEntries={['/create']}>
+            <MemoryRouter initialEntries={[initialEntry]}>
               <NamespaceProvider>
                 <WorkspaceCreate />
+                <LocationProbe />
               </NamespaceProvider>
             </MemoryRouter>
           </AuthProvider>
@@ -316,6 +322,19 @@ describe('template-aware simple create', () => {
     await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
     const p = lastSimplePayload();
     expect(p.idleShutdown).toEqual({ enabled: false, timeoutInMinutes: 30, detection });
+  });
+
+  test('post-create returns to the list carrying the page namespace, not the cookie active', async () => {
+    // The create page's ?namespace= (deep link / second tab) wins over the bootstrap
+    // active for the create itself; the redirect must carry the same namespace — a bare
+    // '/' canonicalizes back to the bootstrap active and hides the just-created workspace.
+    await renderCreate('/create?namespace=other-ns');
+    await screen.findByText(/^resources$/i);
+    fireEvent.change(screen.getByRole('combobox', { name: /image/i }), { target: { value: 'nginx:latest' } });
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/?namespace=other-ns'));
   });
 
   test('a flagged default template is auto-selected and suppresses the no-template card', async () => {

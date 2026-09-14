@@ -16,6 +16,7 @@ import {
   formatMemoryGiB,
   findTemplateByRef,
   effectiveResources,
+  withNamespaceParam,
 } from '../../utils';
 import { getAppTypeLogo } from '../icons/appTypeLogo';
 import { strings, ACCELERATOR_LABELS } from '../../constants';
@@ -65,8 +66,8 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
     setDeleteDialogOpen(true);
   };
 
-  const handleViewDetails = () => navigate(`/workspace/${metadata.name}`);
-  const handleEdit = () => navigate(`/workspace/${metadata.name}/edit`);
+  const handleViewDetails = () => navigate(withNamespaceParam(`/workspace/${metadata.name}`, metadata.namespace));
+  const handleEdit = () => navigate(withNamespaceParam(`/workspace/${metadata.name}/edit`, metadata.namespace));
 
   // Advanced edit is offered only to the owner and only while Stopped, to avoid
   // mutating a live workspace's spec (for now).

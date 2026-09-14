@@ -5,7 +5,8 @@ import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/Workspa
 import { SimpleWorkspaceEditor } from '../components/workspace/SimpleWorkspaceEditor';
 import { useWorkspace } from '../api';
 import { useAuth } from '../context';
-import { getWorkspaceOwner, getWorkspaceStatus, isOwner } from '../utils';
+import { getWorkspaceOwner, getWorkspaceStatus, isOwner, withNamespaceParam } from '../utils';
+import { useNamespace } from '../context/NamespaceContext';
 import { strings } from '../constants';
 
 // A full-page notice shown when the workspace can't be edited (mirrors WorkspaceSpecEditor's
@@ -38,6 +39,7 @@ export function WorkspaceAdvancedEditor() {
   const navigate = useNavigate();
   const { workspace: ws } = strings;
   const { user } = useAuth();
+  const { activeNamespace } = useNamespace();
 
   const [useYaml, setUseYaml] = useState(false);
   // name/displayName are lifted so they survive the simple ↔ YAML toggle. Both are derived
@@ -73,8 +75,8 @@ export function WorkspaceAdvancedEditor() {
           displayName={displayName}
           setDisplayName={setDisplayNameOverride}
           notice={EditNotice}
-          onBack={() => navigate('/')}
-          onBackDetail={() => existing && navigate(`/workspace/${existing.metadata.name}`)}
+          onBack={() => navigate(withNamespaceParam('/', activeNamespace))}
+          onBackDetail={() => existing && navigate(withNamespaceParam(`/workspace/${existing.metadata.name}`, existing.metadata.namespace))}
         />
       </Stack>
     </Container>

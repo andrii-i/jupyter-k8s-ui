@@ -1,5 +1,6 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
-import { render, screen, cleanup, act } from '@testing-library/react';
+import { render, screen, cleanup, act, fireEvent, waitFor } from '@testing-library/react';
+import { useLocation } from 'react-router-dom';
 import type { DiscoveredTemplate } from '../../types';
 import { TestProviders, makeWorkspace, makeQueryClient } from '../../test-utils';
 
@@ -35,7 +36,12 @@ const { AuthProvider, authKeys } = await import('../../context/AuthContext');
 // break them.
 const alice = { displayUser: 'alice-raw-claim', k8sUser: 'alice' };
 
-async function renderCard(ws: ReturnType<typeof makeWorkspace>) {
+function LocationProbe() {
+  const { pathname, search } = useLocation();
+  return <div data-testid="location">{pathname + search}</div>;
+}
+
+async function renderCard(ws: ReturnType<typeof makeWorkspace>, extra?: React.ReactNode) {
   const queryClient = makeQueryClient();
   // Seed the me-query (fresh for its 5-minute staleTime), so AuthProvider resolves
   // without a fetch — the same trick TestProviders uses for the namespace bootstrap.
@@ -49,6 +55,7 @@ async function renderCard(ws: ReturnType<typeof makeWorkspace>) {
       <TestProviders queryClient={queryClient}>
         <AuthProvider>
           <WorkspaceCard workspace={ws} />
+          {extra}
         </AuthProvider>
       </TestProviders>,
     );
@@ -227,5 +234,14 @@ describe('WorkspaceCard resources fallback to template defaults (#69)', () => {
     expect(screen.getByText('2 CPU')).toBeDefined();
     // The template's gpu default must not leak into a workspace that stored no gpu.
     expect(screen.queryByText('1 GPU')).toBeNull();
+  });
+
+  test('Details navigates carrying the workspace namespace', async () => {
+    // A bare /workspace/<name> would resolve the detail fetch against the cookie's
+    // namespace, 404ing when this list was reached via a ?namespace= deep link.
+    const ws = makeWorkspace({ owner: 'alice', metadata: { namespace: 'team-b' } });
+    await renderCard(ws, <LocationProbe />);
+    fireEvent.click(screen.getByRole('button', { name: /details/i }));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/workspace/test-ws?namespace=team-b'));
   });
 });

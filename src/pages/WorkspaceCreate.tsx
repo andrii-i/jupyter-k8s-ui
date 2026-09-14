@@ -11,7 +11,7 @@ import { WorkspaceResourceForm, type WorkspaceFormValues } from '../components/w
 import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/WorkspaceSpecEditor';
 import type { CreateWorkspaceRequest, DiscoveredTemplate } from '../types';
 import { strings } from '../constants';
-import { sanitizeK8sName, resolveTemplateControls, buildCreateResources, clamp } from '../utils';
+import { sanitizeK8sName, resolveTemplateControls, buildCreateResources, clamp, withNamespaceParam } from '../utils';
 
 function generateDefaults(username: string, existingCount: number) {
   const n = existingCount + 1;
@@ -191,7 +191,7 @@ export function WorkspaceCreate() {
 
     try {
       await createMutation.mutateAsync(request);
-      navigate('/');
+      navigate(withNamespaceParam('/', activeNamespace));
     } catch {
       // Error surfaced via createMutation.error
     }
@@ -286,7 +286,7 @@ export function WorkspaceCreate() {
             <AdvancedBox onSwitchToYaml={() => setAdvanced(true)} />
 
             <Stack direction="row" spacing={2} justifyContent="flex-end">
-              <Button variant="text" onClick={() => navigate('/')}>
+              <Button variant="text" onClick={() => navigate(withNamespaceParam('/', activeNamespace))}>
                 {strings.common.cancel}
               </Button>
               <Button type="submit" variant="contained" disabled={!name || unstartable || createMutation.isPending}>

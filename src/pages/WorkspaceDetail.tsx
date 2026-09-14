@@ -27,7 +27,9 @@ import {
   formatMemoryGiB,
   findTemplateByRef,
   effectiveResources,
+  withNamespaceParam,
 } from '../utils';
+import { useNamespace } from '../context/NamespaceContext';
 import type { WorkspaceCondition } from '../types';
 import { strings, ACCELERATOR_LABELS } from '../constants';
 import styles from './WorkspaceDetail.module.css';
@@ -78,6 +80,7 @@ export function WorkspaceDetail() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { activeNamespace } = useNamespace();
   const { data: workspace, isLoading, error } = useWorkspace(name ?? '');
   const templatesQuery = useTemplates();
   const startMutation = useStartWorkspace();
@@ -94,7 +97,7 @@ export function WorkspaceDetail() {
   if (error || !workspace) {
     return (
       <Box className={styles.container}>
-        <Button startIcon={<ArrowBack />} onClick={() => navigate('/')}>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate(withNamespaceParam('/', activeNamespace))}>
           {strings.common.back}
         </Button>
         <Paper className={styles.errorCard}>
@@ -123,7 +126,7 @@ export function WorkspaceDetail() {
 
   return (
     <Box className={styles.container}>
-      <Button startIcon={<ArrowBack />} onClick={() => navigate('/')} className={styles.backButton}>
+      <Button startIcon={<ArrowBack />} onClick={() => navigate(withNamespaceParam('/', activeNamespace))} className={styles.backButton}>
         {strings.common.back}
       </Button>
 
