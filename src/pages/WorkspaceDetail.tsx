@@ -141,7 +141,12 @@ export function WorkspaceDetail() {
           {/* Advanced edit is offered only to the owner and only while Stopped, to
               avoid mutating a live workspace's spec (for now). */}
           {ownerMatch && workspaceStatus === 'Stopped' && (
-            <Button variant="outlined" startIcon={<Edit />} component={RouterLink} to={`/workspace/${workspace.metadata.name}/edit`}>
+            <Button
+              variant="outlined"
+              startIcon={<Edit />}
+              component={RouterLink}
+              to={withNamespaceParam(`/workspace/${workspace.metadata.name}/edit`, workspace.metadata.namespace)}
+            >
               {strings.workspace.edit}
             </Button>
           )}

@@ -20,7 +20,7 @@ import { useWorkspaces, useClusterAccess } from '../api';
 import { isAuthError, ApiError } from '../api/auth-interceptor';
 import { useAuth } from '../context';
 import { useNamespace } from '../context/NamespaceContext';
-import { isOwner as checkIsOwner, getWorkspaceOwner } from '../utils';
+import { isOwner as checkIsOwner, getWorkspaceOwner, withNamespaceParam } from '../utils';
 import { WorkspaceCard } from '../components';
 import { strings } from '../constants';
 import styles from './WorkspaceList.module.css';
@@ -93,7 +93,7 @@ export function WorkspaceList() {
     setPage(1);
   };
 
-  const handleCreateClick = () => navigate('/create');
+  const handleCreateClick = () => navigate(withNamespaceParam('/create', activeNamespace));
 
   // No namespace yet: the workspaces query is disabled until one resolves, so show the
   // bootstrap's own progress rather than a premature "No workspaces yet".
